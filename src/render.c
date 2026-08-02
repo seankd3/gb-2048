@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "render.h"
+#include "frame.h"
 #include "gfx.h"
 
 #define SCREEN_W 20
@@ -134,9 +135,9 @@ void render_slide(const MoveResult *res) {
            drops the call when it sits behind an `if` here (it warns with
            "conditional flow changed by optimizer"), which silently disables
            the whole animation. */
-        vsync();
+        frame_next();
         buf_flush();
-        for (h = 1; h < SLIDE_HOLD; h++) vsync();
+        for (h = 1; h < SLIDE_HOLD; h++) frame_next();
     }
 }
 

@@ -6,6 +6,8 @@
 #include "render.h"
 #include "rng.h"
 #include "save.h"
+#include "sound.h"
+#include "frame.h"
 #include "gfx.h"
 
 #define EXP_2048 11   /* 2^11 */
@@ -36,11 +38,12 @@ static void title_screen(void) {
     render_score(0, best);
 
     for (;;) {
-        vsync();
+        frame_next();
         ticks++;
         if (poll_pressed() & (J_START | J_A)) break;
     }
     rng_seed(ticks);
+    sound_start();
 }
 
 static void new_game(void) {
@@ -65,6 +68,19 @@ static void undo_move(void) {
     render_score(board.score, best);
 }
 
+/* Highest value produced by this move, or 0 if nothing merged. Drives the
+   merge pitch, so a cascade is voiced by its biggest tile. */
+static uint8_t top_merge_exp(const MoveResult *r) {
+    uint8_t i, m = 0, e;
+    for (i = 0; i < r->count; i++) {
+        if (r->moves[i].merged) {
+            e = (uint8_t)(r->moves[i].exp + 1);
+            if (e > m) m = e;
+        }
+    }
+    return m;
+}
+
 static uint8_t direction_from(uint8_t pressed, Direction *dir) {
     if (pressed & J_LEFT)  { *dir = DIR_LEFT;  return 1; }
     if (pressed & J_RIGHT) { *dir = DIR_RIGHT; return 1; }
@@ -75,7 +91,7 @@ static uint8_t direction_from(uint8_t pressed, Direction *dir) {
 
 static void wait_for_start(void) {
     for (;;) {
-        vsync();
+        frame_next();
         if (poll_pressed() & J_START) return;
     }
 }
@@ -87,7 +103,8 @@ static void play(void) {
     new_game();
 
     for (;;) {
-        vsync();
+        frame_next();
+
         pressed = poll_pressed();
 
         if (pressed & J_SELECT) return;   /* back to title */
@@ -96,7 +113,9 @@ static void play(void) {
         if (direction_from(pressed, &dir)) {
             undo_board = board;
             if (board_slide(&board, dir, &res)) {
+                uint8_t merged = top_merge_exp(&res);
                 can_undo = 1;
+                if (merged) sound_merge(merged); else sound_move();
                 render_slide(&res);
                 board_spawn(&board);
                 render_board(&board);
@@ -108,16 +127,20 @@ static void play(void) {
 
                 if (!won_announced && board_max_exp(&board) >= EXP_2048) {
                     won_announced = 1;
+                    sound_win();
                     render_banner("2048", "START TO GO ON");
                     wait_for_start();
                     render_board(&board);
                 }
 
                 if (!board_can_move(&board)) {
+                    sound_gameover();
                     render_banner("GAME OVER", "START FOR NEW");
                     wait_for_start();
                     return;
                 }
+            } else {
+                sound_reject();   /* pressed a direction that changes nothing */
             }
         }
     }
@@ -126,6 +149,7 @@ static void play(void) {
 void main(void) {
     cpu_fast();          /* CGB double speed: headroom for full-board redraws */
     render_init();
+    sound_init();
     best = save_load_best();
     prev_pad = 0;
 

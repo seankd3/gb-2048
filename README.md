@@ -42,6 +42,25 @@ python tools\shot.py --press 90:start --press 130:left --at 135 --at 150
 
 `--press FRAME:BUTTON` queues an input, `--at FRAME` captures that frame.
 
+## Sound
+
+Two pulse channels, driven by a small sequencer in `src/sound.c` that is
+ticked once per frame from `frame_next()`. Use `frame_next()` rather than
+`vsync()` anywhere you wait, or audio stalls during the slide animation.
+
+Channel 1 carries anything melodic — merges and the win and lose stings.
+Channel 2 carries interface blips. Splitting them means a merge and a move
+can sound together without either cutting the other off.
+
+Merge pitch rises with the value produced, so a 4 is a low C and 2048 is a
+high C, and a cascade is voiced by its biggest tile. Every note comes from a
+pentatonic set, chosen because merges overlap and a pentatonic scale has no
+interval that can clash.
+
+The move blip is deliberately the quietest thing here: volume 3 on the 12.5%
+duty pulse, two frames long. It fires on almost every press, so it has to
+survive hours of play rather than sound impressive once.
+
 ## Layout
 
 The screen is 20x18 tiles. Rows 0-1 hold the score bar. The board fills rows
@@ -72,3 +91,10 @@ seven palettes: 2 and 4 are bone, 8 and 16 amber, and so on up to violet.
 - **The ROM is CGB-only (`0xC0`).** It will not boot on an original DMG. To
   support one, change the header flag and make every screen readable in four
   shades of grey.
+- **Check where your instrument samples before believing it.** `NR52`'s low
+  bits report which channels are sounding, which is a good way to verify
+  audio without hearing it — but sampled from the main loop it reported that
+  merges never played. Every merge sound is eight frames long and the slide
+  animation is exactly eight frames, so the sound began and ended inside
+  `render_slide` and the main loop never saw it. Sampling from `frame_next()`
+  showed both channels firing. The audio had been correct all along.
