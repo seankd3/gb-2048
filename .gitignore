@@ -1,0 +1,19 @@
+# GBDK / SDCC intermediates
+*.o
+*.lst
+*.sym
+*.map
+*.rel
+*.ihx
+*.asm
+*.cdb
+*.adb
+*.noi
+*.lk
+
+# Build output (the ROM is reproducible from source)
+build/
+
+# Emulator save files
+*.sav
+*.rtc
