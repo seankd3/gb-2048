@@ -156,18 +156,19 @@ void render_text_centered(uint8_t y, const char *s) {
     render_text(x, y, s);
 }
 
-/* Clear a four-row band across the middle of the board and write two lines
-   into it, so overlays stay legible over a busy grid. */
+/* Clears the middle two rows of cells outright and writes two lines into the
+   gap. The band is snapped to whole cells (screen rows 6-13) so the overlay
+   never slices a tile in half. */
 void render_banner(const char *line1, const char *line2) {
     uint8_t y;
     uint8_t blank = gfx_char_tile(' ');
     memset(rowbuf, blank, SCREEN_W);
     memset(attrbuf, 0, SCREEN_W);
-    for (y = 7; y <= 11; y++) {
+    for (y = 6; y <= 13; y++) {
         put_tiles(0, y, SCREEN_W, 1, rowbuf, attrbuf);
     }
     render_text_centered(8, line1);
-    if (line2) render_text_centered(10, line2);
+    if (line2) render_text_centered(11, line2);
 }
 
 static void u32_to_str(uint32_t v, char *out) {

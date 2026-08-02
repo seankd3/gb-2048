@@ -5,15 +5,18 @@
 #include "board.h"
 #include "render.h"
 #include "rng.h"
+#include "save.h"
 #include "gfx.h"
 
 #define EXP_2048 11   /* 2^11 */
 
 static Board      board;
+static Board      undo_board;   /* snapshot taken before each accepted move */
 static MoveResult res;
 static uint32_t   best;
 static uint8_t    prev_pad;
 static uint8_t    won_announced;
+static uint8_t    can_undo;
 
 static uint8_t poll_pressed(void) {
     uint8_t now = joypad();
@@ -45,8 +48,19 @@ static void new_game(void) {
     board_spawn(&board);
     board_spawn(&board);
     won_announced = 0;
+    can_undo = 0;
 
     render_clear();
+    render_board(&board);
+    render_score(board.score, best);
+}
+
+/* Best is deliberately not rolled back by undo: it records the highest score
+   actually reached, and taking a move back should not erase that. */
+static void undo_move(void) {
+    if (!can_undo) return;
+    board = undo_board;
+    can_undo = 0;
     render_board(&board);
     render_score(board.score, best);
 }
@@ -77,13 +91,19 @@ static void play(void) {
         pressed = poll_pressed();
 
         if (pressed & J_SELECT) return;   /* back to title */
+        if (pressed & J_B) undo_move();
 
         if (direction_from(pressed, &dir)) {
+            undo_board = board;
             if (board_slide(&board, dir, &res)) {
+                can_undo = 1;
                 render_slide(&res);
                 board_spawn(&board);
                 render_board(&board);
-                if (board.score > best) best = board.score;
+                if (board.score > best) {
+                    best = board.score;
+                    save_store_best(best);
+                }
                 render_score(board.score, best);
 
                 if (!won_announced && board_max_exp(&board) >= EXP_2048) {
@@ -106,7 +126,7 @@ static void play(void) {
 void main(void) {
     cpu_fast();          /* CGB double speed: headroom for full-board redraws */
     render_init();
-    best = 0;
+    best = save_load_best();
     prev_pad = 0;
 
     for (;;) {
