@@ -3,8 +3,17 @@
 2048 for the Game Boy Color, built to run on real hardware — a ModRetro
 Chromatic with an EverDrive, or any GBC.
 
-The ROM is 32 KB, CGB-only, MBC5 with battery-backed RAM. The best score is
-kept in the cartridge battery and survives a power cycle.
+The ROM is 32 KB, CGB-only, MBC5 with battery-backed RAM. The best score,
+your settings, and the game in progress are all kept in the cartridge battery
+and survive a power cycle, so you can switch off mid-game and pick the same
+board back up.
+
+Written in C with [GBDK-2020](https://github.com/gbdk-2020/gbdk-2020). Tile
+art is generated, not drawn: `tools/gen_assets.py` renders every glyph and
+tile face and packs them into a deduplicated bank.
+
+Grab the ROM from [Releases](../../releases) and drop it on an EverDrive SD
+card, or build it yourself with `.\build.ps1`.
 
 ## Controls
 
