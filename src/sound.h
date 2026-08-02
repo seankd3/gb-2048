@@ -5,6 +5,7 @@
 
 void sound_init(void);
 void sound_update(void);          /* once per frame, via frame_next() */
+void sound_silence(void);         /* cut both channels immediately */
 
 /* A slide that changed the board. Deliberately the quietest sound here: it
    fires on nearly every press, so it has to survive hours of play. */

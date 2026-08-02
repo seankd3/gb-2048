@@ -12,8 +12,30 @@ kept in the cartridge battery and survives a power cycle.
 |---|---|
 | D-pad | Slide the board |
 | B | Undo one move |
-| Start | New game, or continue past 2048 |
-| Select | Back to the title screen |
+| Start | Continue past 2048, or start again after a loss |
+| Select | Open settings |
+
+In settings, up and down move, left and right change a value, A activates
+`NEW GAME` or `RESUME`, and B closes. Settings are written to the cartridge
+battery on exit, so they survive a power cycle.
+
+## Animation speed
+
+| Setting | Steps | Hold | Press to settled |
+|---|---|---|---|
+| Slow | 4 | 3 | ~316 ms |
+| Normal | 4 | 1 | ~266 ms |
+| Fast (default) | 2 | 1 | ~133 ms |
+| Instant | — | — | ~16 ms |
+
+Dwell alone cannot make the slide faster. Pushing the shadow buffer to VRAM
+costs roughly a frame per step, so holding each step for one frame is no
+quicker than holding it for two — at four steps the floor is ~266 ms whatever
+the hold. Speed therefore also halves the step count, which is the only thing
+that actually buys time. Step counts must divide the four-tile cell pitch
+evenly so every interpolated position lands on a whole tile.
+
+Fast is the default because it matches the pace of the browser original.
 
 ## Build
 
@@ -74,6 +96,14 @@ a whole tile. No sub-tile scrolling is needed.
 8x8 tiles, removes duplicates, and writes `src/gfx.c`. The bank currently
 uses 134 of the 256 available tiles.
 
+Text uses a 6x7 face with two-pixel stems. M and W are drawn at seven pixels
+because at six their inner strokes collapse into a solid block; they are the
+two genuinely wide letters, so this reads as correct rather than inconsistent.
+
+Tile numbers come in three sizes, chosen by how many characters the value
+needs: a 6x10 face up to four characters, which covers nearly every tile you
+will ever see, then 5x7 for five and 4x7 for six.
+
 Colour comes from the CGB palette, not the art. All values share the same
 geometry and differ only by which of the eight background palettes they use,
 which is why the whole ramp costs so few tiles. Values are paired across
@@ -91,6 +121,11 @@ seven palettes: 2 and 4 are bone, 8 and 16 amber, and so on up to violet.
 - **The ROM is CGB-only (`0xC0`).** It will not boot on an original DMG. To
   support one, change the header flag and make every screen readable in four
   shades of grey.
+- **Tile indices are not positions in `UI_CHARS`.** The bank deduplicates, and
+  some glyphs are pixel-identical — `O` and `0` are, in this font. The
+  generator records the index the bank actually returns per character. Assume
+  otherwise and every glyph after the first duplicate renders as its
+  neighbour, which shows up as digits turning into punctuation.
 - **Check where your instrument samples before believing it.** `NR52`'s low
   bits report which channels are sounding, which is a good way to verify
   audio without hearing it — but sampled from the main loop it reported that

@@ -1,10 +1,11 @@
-#include <gbdk/platform.h>
+﻿#include <gbdk/platform.h>
 #include <gb/gb.h>
 #include <gb/cgb.h>
 #include <string.h>
 
 #include "render.h"
 #include "frame.h"
+#include "settings.h"
 #include "gfx.h"
 
 #define SCREEN_W 20
@@ -64,8 +65,15 @@ void render_board(const Board *b) {
    always a whole number of tiles and no sub-tile scrolling is needed. */
 
 #define BOARD_TILES 16
-#define SLIDE_STEPS 4
-#define SLIDE_HOLD  2   /* frames per step -> ~133ms, matching the web original */
+
+/* Speed controls both how many positions a tile is drawn at and how long each
+   is held. Dwell alone is not enough: a step costs about a frame just to push
+   the buffer to VRAM, so holding for one frame is no faster than two. Fast
+   therefore halves the number of steps instead. Steps must divide the 4-tile
+   cell pitch evenly so every interpolated position stays on a whole tile.
+   Measured press-to-settled: slow ~366ms, normal ~266ms, fast ~133ms. */
+static const uint8_t steps_for_speed[SPEED_COUNT] = { 4, 4, 2, 0 };
+static const uint8_t hold_for_speed[SPEED_COUNT]  = { 3, 1, 1, 0 };
 
 static uint8_t map_buf[BOARD_TILES * BOARD_TILES];
 static uint8_t att_buf[BOARD_TILES * BOARD_TILES];
@@ -117,8 +125,13 @@ static void buf_flush(void) {
 void render_slide(const MoveResult *res) {
     uint8_t i, h;
     int step, fx, fy, tx, ty;
+    uint8_t sp = (settings.speed < SPEED_COUNT) ? settings.speed : SPEED_NORMAL;
+    uint8_t hold  = hold_for_speed[sp];
+    int     steps = steps_for_speed[sp];
 
-    for (step = 1; step <= SLIDE_STEPS; step++) {
+    if (steps == 0) return;   /* instant: caller draws the settled board */
+
+    for (step = 1; step <= steps; step++) {
         buf_clear();
         for (i = 0; i < res->count; i++) {
             fx = (int)(res->moves[i].from & 3) * GFX_CELL_TILES;
@@ -127,8 +140,8 @@ void render_slide(const MoveResult *res) {
             ty = (int)(res->moves[i].to >> 2) * GFX_CELL_TILES;
             /* Cells are 4 tiles apart, so these divisions are exact and the
                interpolated position is always a whole tile. */
-            buf_put_cell(fx + (tx - fx) * step / SLIDE_STEPS,
-                         fy + (ty - fy) * step / SLIDE_STEPS,
+            buf_put_cell(fx + (tx - fx) * step / steps,
+                         fy + (ty - fy) * step / steps,
                          res->moves[i].exp);
         }
         /* Keep buf_flush out of any conditional in this loop. SDCC's optimizer
@@ -137,7 +150,7 @@ void render_slide(const MoveResult *res) {
            the whole animation. */
         frame_next();
         buf_flush();
-        for (h = 1; h < SLIDE_HOLD; h++) frame_next();
+        for (h = 1; h < hold; h++) frame_next();
     }
 }
 
@@ -202,3 +215,4 @@ void render_score(uint32_t score, uint32_t best) {
     draw_value(0, 1, score, 7);
     draw_value(12, 1, best, 7);
 }
+

@@ -3,6 +3,7 @@
 #include <gb/hardware.h>
 
 #include "sound.h"
+#include "settings.h"
 
 /* Frequency register values, from reg = 2048 - 131072/Hz.
    The scale is pentatonic on purpose: merges cascade and overlap, and a
@@ -78,6 +79,8 @@ static void chan_off(uint8_t base) {
 
 static void voice_play(Voice *v, const Note *seq, uint8_t len,
                        uint8_t env, uint8_t duty) {
+    if (settings.sound == 0) return;
+
     v->seq   = seq;
     v->len   = len;
     v->idx   = 0;
@@ -118,6 +121,15 @@ void sound_init(void) {
 void sound_update(void) {
     voice_update(&v1);
     voice_update(&v2);
+}
+
+/* Cuts anything mid-note. Used when sound is switched off in the menu, so a
+   sustained note cannot hang after the setting changes. */
+void sound_silence(void) {
+    v1.seq = 0;
+    v2.seq = 0;
+    chan_off(CH1_BASE);
+    chan_off(CH2_BASE);
 }
 
 /* Duty 0x00 is the 12.5% pulse, which is thin and soft rather than bright,

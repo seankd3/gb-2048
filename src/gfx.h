@@ -5,12 +5,12 @@
 #include <gbdk/platform.h>
 #include <stdint.h>
 
-#define GFX_NUM_TILES   134
+#define GFX_NUM_TILES   142
 #define GFX_MAX_EXP     16
 #define GFX_CELL_TILES  4
 #define GFX_UI_BASE     0
 
-extern const uint8_t gfx_tiles[134 * 16];
+extern const uint8_t gfx_tiles[142 * 16];
 extern const uint8_t gfx_cell_map[17][16];
 extern const uint8_t gfx_palette_for_exp[17];
 extern const palette_color_t gfx_bkg_palettes[8 * 4];

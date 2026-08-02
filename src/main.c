@@ -1,4 +1,4 @@
-#include <gbdk/platform.h>
+﻿#include <gbdk/platform.h>
 #include <gb/gb.h>
 #include <gb/cgb.h>
 
@@ -8,6 +8,9 @@
 #include "save.h"
 #include "sound.h"
 #include "frame.h"
+#include "input.h"
+#include "menu.h"
+#include "settings.h"
 #include "gfx.h"
 
 #define EXP_2048 11   /* 2^11 */
@@ -16,16 +19,8 @@ static Board      board;
 static Board      undo_board;   /* snapshot taken before each accepted move */
 static MoveResult res;
 static uint32_t   best;
-static uint8_t    prev_pad;
 static uint8_t    won_announced;
 static uint8_t    can_undo;
-
-static uint8_t poll_pressed(void) {
-    uint8_t now = joypad();
-    uint8_t pressed = (uint8_t)(now & ~prev_pad);
-    prev_pad = now;
-    return pressed;
-}
 
 /* The title screen doubles as the entropy source: however many frames the
    player leaves it sitting there seeds the run. */
@@ -40,7 +35,7 @@ static void title_screen(void) {
     for (;;) {
         frame_next();
         ticks++;
-        if (poll_pressed() & (J_START | J_A)) break;
+        if (input_pressed() & (J_START | J_A)) break;
     }
     rng_seed(ticks);
     sound_start();
@@ -92,7 +87,7 @@ static uint8_t direction_from(uint8_t pressed, Direction *dir) {
 static void wait_for_start(void) {
     for (;;) {
         frame_next();
-        if (poll_pressed() & J_START) return;
+        if (input_pressed() & J_START) return;
     }
 }
 
@@ -105,9 +100,18 @@ static void play(void) {
     for (;;) {
         frame_next();
 
-        pressed = poll_pressed();
+        pressed = input_pressed();
 
-        if (pressed & J_SELECT) return;   /* back to title */
+        if (pressed & J_SELECT) {
+            if (menu_open(best) == MENU_NEW_GAME) {
+                new_game();
+                continue;
+            }
+            render_clear();
+            render_board(&board);
+            render_score(board.score, best);
+            continue;
+        }
         if (pressed & J_B) undo_move();
 
         if (direction_from(pressed, &dir)) {
@@ -121,7 +125,7 @@ static void play(void) {
                 render_board(&board);
                 if (board.score > best) {
                     best = board.score;
-                    save_store_best(best);
+                    save_store(best);
                 }
                 render_score(board.score, best);
 
@@ -150,11 +154,12 @@ void main(void) {
     cpu_fast();          /* CGB double speed: headroom for full-board redraws */
     render_init();
     sound_init();
-    best = save_load_best();
-    prev_pad = 0;
+    save_load(&best);
+    input_reset();
 
     for (;;) {
         title_screen();
         play();
     }
 }
+
