@@ -29,10 +29,14 @@ if ($LASTEXITCODE -ne 0) { throw 'asset generation failed' }
 
 New-Item -ItemType Directory -Force (Join-Path $root 'build') | Out-Null
 
-$sources = Get-ChildItem (Join-Path $root 'src\*.c') | ForEach-Object { $_.FullName }
-$args = @('-Wm-yC', '-Wm-yn2048', '-Wm-yt0x1B', '-Wm-ya1', '-o', $out) + $sources
+$sources = (Get-ChildItem (Join-Path $root 'src\*.c') |
+            ForEach-Object { '"' + $_.FullName + '"' }) -join ' '
 
-& $lcc @args
+# SDCC writes per-file progress to stderr even on success. Under
+# $ErrorActionPreference='Stop' PowerShell turns that into a terminating
+# NativeCommandError, so the build is run through cmd and judged purely on
+# the exit code.
+cmd /c "`"$lcc`" -Wm-yC -Wm-yn2048 -Wm-yt0x1B -Wm-ya1 -o `"$out`" $sources 2>&1"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (exit $LASTEXITCODE)" }
 
 $size = (Get-Item $out).Length

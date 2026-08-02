@@ -80,6 +80,7 @@ static void play(void) {
 
         if (direction_from(pressed, &dir)) {
             if (board_slide(&board, dir, &res)) {
+                render_slide(&res);
                 board_spawn(&board);
                 render_board(&board);
                 if (board.score > best) best = board.score;

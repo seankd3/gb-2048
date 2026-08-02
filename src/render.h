@@ -15,6 +15,10 @@ void render_board(const Board *b);
 void render_cell(uint8_t index, uint8_t exp);
 void render_cell_at(uint8_t tx, uint8_t ty, uint8_t exp);
 void render_score(uint32_t score, uint32_t best);
+
+/* Animates every tile from its source to its destination. Call with the
+   MoveResult from board_slide, before drawing the settled board. */
+void render_slide(const MoveResult *res);
 void render_text(uint8_t x, uint8_t y, const char *s);
 void render_text_centered(uint8_t y, const char *s);
 void render_banner(const char *line1, const char *line2);

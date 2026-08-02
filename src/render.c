@@ -57,6 +57,89 @@ void render_board(const Board *b) {
     }
 }
 
+/* ---- slide animation -------------------------------------------------
+   The board is composed into a WRAM shadow buffer and pushed to VRAM in two
+   blits per step. Cells sit 4 tiles apart, so an interpolated position is
+   always a whole number of tiles and no sub-tile scrolling is needed. */
+
+#define BOARD_TILES 16
+#define SLIDE_STEPS 4
+#define SLIDE_HOLD  2   /* frames per step -> ~133ms, matching the web original */
+
+static uint8_t map_buf[BOARD_TILES * BOARD_TILES];
+static uint8_t att_buf[BOARD_TILES * BOARD_TILES];
+
+static void buf_put_cell(int tx, int ty, uint8_t exp);
+
+/* Resets to the empty 4x4 grid rather than flat background, so the slots stay
+   visible underneath the tiles sliding over them. */
+static void buf_clear(void) {
+    uint8_t i;
+    memset(map_buf, gfx_char_tile(' '), sizeof(map_buf));
+    memset(att_buf, 0, sizeof(att_buf));
+    for (i = 0; i < BOARD_CELLS; i++) {
+        buf_put_cell((int)(i & 3) * GFX_CELL_TILES,
+                     (int)(i >> 2) * GFX_CELL_TILES, 0);
+    }
+}
+
+static void buf_put_cell(int tx, int ty, uint8_t exp) {
+    const uint8_t *m = gfx_cell_map[exp];
+    uint8_t pal = gfx_palette_for_exp[exp];
+    int r, c, x, y;
+
+    for (r = 0; r < GFX_CELL_TILES; r++) {
+        y = ty + r;
+        if (y < 0 || y >= BOARD_TILES) continue;
+        for (c = 0; c < GFX_CELL_TILES; c++) {
+            x = tx + c;
+            if (x < 0 || x >= BOARD_TILES) continue;
+            map_buf[y * BOARD_TILES + x] = m[r * GFX_CELL_TILES + c];
+            att_buf[y * BOARD_TILES + x] = pal;
+        }
+    }
+}
+
+/* Written a row at a time to keep each VRAM burst small. */
+static void buf_flush(void) {
+    uint8_t r;
+    for (r = 0; r < BOARD_TILES; r++) {
+        VBK_REG = 1;
+        set_bkg_tiles(BOARD_ORIGIN_X, (uint8_t)(BOARD_ORIGIN_Y + r),
+                      BOARD_TILES, 1, att_buf + r * BOARD_TILES);
+        VBK_REG = 0;
+        set_bkg_tiles(BOARD_ORIGIN_X, (uint8_t)(BOARD_ORIGIN_Y + r),
+                      BOARD_TILES, 1, map_buf + r * BOARD_TILES);
+    }
+}
+
+void render_slide(const MoveResult *res) {
+    uint8_t i, h;
+    int step, fx, fy, tx, ty;
+
+    for (step = 1; step <= SLIDE_STEPS; step++) {
+        buf_clear();
+        for (i = 0; i < res->count; i++) {
+            fx = (int)(res->moves[i].from & 3) * GFX_CELL_TILES;
+            fy = (int)(res->moves[i].from >> 2) * GFX_CELL_TILES;
+            tx = (int)(res->moves[i].to & 3) * GFX_CELL_TILES;
+            ty = (int)(res->moves[i].to >> 2) * GFX_CELL_TILES;
+            /* Cells are 4 tiles apart, so these divisions are exact and the
+               interpolated position is always a whole tile. */
+            buf_put_cell(fx + (tx - fx) * step / SLIDE_STEPS,
+                         fy + (ty - fy) * step / SLIDE_STEPS,
+                         res->moves[i].exp);
+        }
+        /* Keep buf_flush out of any conditional in this loop. SDCC's optimizer
+           drops the call when it sits behind an `if` here (it warns with
+           "conditional flow changed by optimizer"), which silently disables
+           the whole animation. */
+        vsync();
+        buf_flush();
+        for (h = 1; h < SLIDE_HOLD; h++) vsync();
+    }
+}
+
 void render_text(uint8_t x, uint8_t y, const char *s) {
     uint8_t n = 0;
     while (s[n] && (x + n) < SCREEN_W) {
