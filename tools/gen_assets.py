@@ -112,13 +112,14 @@ UI_FONT = {
     '9': ".####.|##..##|##..##|.#####|....##|##..##|.####.",
     '!': "..##..|..##..|..##..|..##..|..##..|......|..##..",
     '-': "......|......|......|######|......|......|......",
+    '+': "......|..##..|..##..|######|..##..|..##..|......",
     '.': "......|......|......|......|......|..##..|..##..",
     ':': "......|..##..|..##..|......|..##..|..##..|......",
     '>': "##....|.##...|..##..|...##.|..##..|.##...|##....",
     '<': "....##|...##.|..##..|.##...|..##..|...##.|....##",
 }
 
-UI_CHARS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!-.:><"
+UI_CHARS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!-.:><+"
 
 
 def glyph_rows(spec):
@@ -239,15 +240,19 @@ PALETTES = [
     ['#241f1c', '#c4623a', '#2a1712', '#9c4a2a'],   # 3: 32, 64
     ['#241f1c', '#d4b048', '#3b2f14', '#a98a30'],   # 4: 128, 256
     ['#241f1c', '#bf8f22', '#332510', '#966e16'],   # 5: 512, 1024
-    ['#241f1c', '#e0562e', '#2b1009', '#b03d1d'],   # 6: 2048, 4096
-    ['#241f1c', '#8f6fd0', '#1d1330', '#6d51a6'],   # 7: 8192+
+    ['#241f1c', '#e0562e', '#2b1009', '#b03d1d'],   # 6: 2048 and up
+    ['#241f1c', '#f7f1e6', '#241f1c', '#ddd3c4'],   # 7: merge flash
 ]
 
-# tile value exponent -> palette index
+PAL_FLASH = 7
+
+# Tile value exponent -> palette index. The ramp is squeezed into 1..6 so the
+# last palette can be spent on the merge flash, which is worth more than a
+# separate colour for tiles past 4096 that almost nobody will see.
 def palette_for(exp):
     if exp == 0:
         return 0
-    return min(1 + (exp - 1) // 2, 7)
+    return min(1 + (exp - 1) // 2, 6)
 
 
 # ---------------------------------------------------------------- emit
@@ -267,6 +272,16 @@ def main():
     for ch in UI_CHARS:
         ui_index[ch] = bank.add(slice_tiles(make_ui_glyph(ch))[0])
     ui_base = ui_index[' ']
+
+    # A character with no glyph draws this filled box rather than a blank, so a
+    # missing entry is obvious on screen instead of silently vanishing. '+' was
+    # absent once and the score gain quietly rendered as whitespace.
+    missing = [[0] * 8 for _ in range(8)]
+    for y in range(1, 8):
+        for x in range(1, 7):
+            if y in (1, 7) or x in (1, 6):
+                missing[y][x] = 2
+    missing_index = bank.add(slice_tiles(missing)[0])
 
     # One 4x4 tile map per value: index 0 = empty cell, 1..MAX_EXP = 2..65536.
     cell_maps = []
@@ -290,6 +305,7 @@ def main():
 #define GFX_MAX_EXP     {MAX_EXP}
 #define GFX_CELL_TILES  {CELL_TILES}
 #define GFX_UI_BASE     {ui_base}
+#define GFX_PAL_FLASH   {PAL_FLASH}
 
 extern const uint8_t gfx_tiles[{n} * 16];
 extern const uint8_t gfx_cell_map[{MAX_EXP + 1}][{CELL_TILES * CELL_TILES}];
@@ -339,7 +355,8 @@ uint8_t gfx_char_tile(char c);
             emitted.add(ch)
             lit = "'\\''" if ch == "'" else f"'{ch}'"
             f.write(f"        case {lit}: return {ui_index[ch]};\n")
-        f.write("        default: return %d;\n    }\n}\n" % ui_base)
+        f.write("        default: return %d;   /* missing-glyph box */\n    }\n}\n"
+                % missing_index)
 
     print(f"tiles: {n}/256   cell maps: {len(cell_maps)}   ui glyphs: {len(UI_CHARS)}")
 

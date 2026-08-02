@@ -15,6 +15,9 @@ void render_board(const Board *b);
 void render_cell(uint8_t index, uint8_t exp);
 void render_cell_at(uint8_t tx, uint8_t ty, uint8_t exp);
 void render_score(uint32_t score, uint32_t best);
+void render_gain(uint32_t gained);
+void render_best_line(uint8_t y, uint32_t best);
+void render_merge_pop(const Board *b, const MoveResult *res);
 
 /* Animates every tile from its source to its destination. Call with the
    MoveResult from board_slide, before drawing the settled board. */

@@ -83,6 +83,26 @@ The move blip is deliberately the quietest thing here: volume 3 on the 12.5%
 duty pulse, two frames long. It fires on almost every press, so it has to
 survive hours of play rather than sound impressive once.
 
+## Feedback on a move
+
+A move reads as three beats rather than one redraw:
+
+1. Tiles slide to their destinations.
+2. Merged tiles flash to near-white for three frames.
+3. The new tile arrives.
+
+The flash costs one palette and no extra tiles. The value ramp is squeezed
+into palettes 1-6 so palette 7 can be spent on it, which is worth more than a
+separate colour for tiles past 4096 that almost nobody will see. It is the
+only moment in the game with that much brightness on screen, so a merge
+cannot be missed.
+
+The new tile is drawn after the flash rather than with the rest of the board.
+Spawning it in the same frame made it look like it had been there all along.
+
+What the move earned shows as `+8` between the score and best fields, and
+stays until the next move so a glance after the fact still tells you.
+
 ## Layout
 
 The screen is 20x18 tiles. Rows 0-1 hold the score bar. The board fills rows
@@ -121,6 +141,10 @@ seven palettes: 2 and 4 are bone, 8 and 16 amber, and so on up to violet.
 - **The ROM is CGB-only (`0xC0`).** It will not boot on an original DMG. To
   support one, change the header flag and make every screen readable in four
   shades of grey.
+- **A character with no glyph now draws a hollow box.** It used to fall back
+  to the space tile, so `+` being absent from the font made the score gain
+  render as whitespace and look like a logic bug. Missing glyphs should be
+  loud.
 - **Tile indices are not positions in `UI_CHARS`.** The bank deduplicates, and
   some glyphs are pixel-identical — `O` and `0` are, in this font. The
   generator records the index the bank actually returns per character. Assume

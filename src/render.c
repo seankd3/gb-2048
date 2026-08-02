@@ -40,10 +40,43 @@ void render_clear(void) {
     }
 }
 
-void render_cell_at(uint8_t tx, uint8_t ty, uint8_t exp) {
+static void cell_at_pal(uint8_t tx, uint8_t ty, uint8_t exp, uint8_t pal) {
     uint8_t attrs[GFX_CELL_TILES * GFX_CELL_TILES];
-    memset(attrs, gfx_palette_for_exp[exp], sizeof(attrs));
+    memset(attrs, pal, sizeof(attrs));
     put_tiles(tx, ty, GFX_CELL_TILES, GFX_CELL_TILES, gfx_cell_map[exp], attrs);
+}
+
+void render_cell_at(uint8_t tx, uint8_t ty, uint8_t exp) {
+    cell_at_pal(tx, ty, exp, gfx_palette_for_exp[exp]);
+}
+
+static void cell_pal(uint8_t index, uint8_t exp, uint8_t pal) {
+    cell_at_pal((uint8_t)(BOARD_ORIGIN_X + (index & 3) * GFX_CELL_TILES),
+                (uint8_t)(BOARD_ORIGIN_Y + (index >> 2) * GFX_CELL_TILES),
+                exp, pal);
+}
+
+/* Merged tiles flash to near-white for a few frames, then settle to their real
+   colour. Costs one palette and no extra tiles, and it is the only moment in
+   the game with that much brightness, so a merge cannot be missed. */
+void render_merge_pop(const Board *b, const MoveResult *res) {
+    uint8_t i, f, any = 0;
+
+    for (i = 0; i < res->count; i++) {
+        if (res->moves[i].merged) {
+            cell_pal(res->moves[i].to, b->cell[res->moves[i].to], GFX_PAL_FLASH);
+            any = 1;
+        }
+    }
+
+    for (f = 0; f < 3; f++) frame_next();
+
+    if (any == 0) return;
+    for (i = 0; i < res->count; i++) {
+        if (res->moves[i].merged) {
+            render_cell(res->moves[i].to, b->cell[res->moves[i].to]);
+        }
+    }
 }
 
 void render_cell(uint8_t index, uint8_t exp) {
@@ -214,5 +247,39 @@ void render_score(uint32_t score, uint32_t best) {
     render_text(12, 0, "BEST");
     draw_value(0, 1, score, 7);
     draw_value(12, 1, best, 7);
+}
+
+/* "BEST 12345" as one centred line, for the title screen. */
+void render_best_line(uint8_t y, uint32_t best) {
+    char buf[16];
+    uint8_t n = 0;
+    buf[n++] = 'B'; buf[n++] = 'E'; buf[n++] = 'S'; buf[n++] = 'T'; buf[n++] = ' ';
+    u32_to_str(best, buf + n);
+    render_text_centered(y, buf);
+}
+
+/* What the last move earned, parked in the gap between the two scores. It
+   stays until the next move rather than fading, so a glance after the fact
+   still tells you what that merge was worth. Zero clears it. */
+#define GAIN_COL   7
+#define GAIN_WIDTH 5   /* columns 7..11, between the score and best fields */
+
+void render_gain(uint32_t gained) {
+    char buf[13];
+    uint8_t n;
+
+    buf[0] = '+';
+    u32_to_str(gained, buf + 1);
+    n = (uint8_t)strlen(buf);
+
+    /* Anything wider than the field is blanked rather than clipped: a
+       truncated "+2048" reading "+204" would be a lie. It takes a 16384 merge
+       to get there, so in practice this never fires. */
+    if (gained == 0 || n > GAIN_WIDTH) {
+        n = 0;
+    }
+    while (n < GAIN_WIDTH) buf[n++] = ' ';
+    buf[GAIN_WIDTH] = 0;
+    render_text(GAIN_COL, 1, buf);
 }
 

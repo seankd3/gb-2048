@@ -26,15 +26,26 @@ static uint8_t    can_undo;
    player leaves it sitting there seeds the run. */
 static void title_screen(void) {
     uint16_t ticks = 0;
+    uint8_t  shown = 1;
 
     render_clear();
     render_cell_at(8, 4, EXP_2048);
     render_text_centered(10, "PRESS START");
-    render_score(0, best);
+
+    /* Only the best score belongs here. The old screen showed SCORE 0, which
+       is just a zero taking up room. */
+    if (best) render_best_line(14, best);
 
     for (;;) {
         frame_next();
         ticks++;
+
+        /* Slow blink, the classic attract-screen tell that it wants a press. */
+        if ((ticks & 31) == 0) {
+            shown = shown ? 0 : 1;
+            render_text_centered(10, shown ? "PRESS START" : "           ");
+        }
+
         if (input_pressed() & (J_START | J_A)) break;
     }
     rng_seed(ticks);
@@ -51,6 +62,7 @@ static void new_game(void) {
     render_clear();
     render_board(&board);
     render_score(board.score, best);
+    render_gain(0);
 }
 
 /* Best is deliberately not rolled back by undo: it records the highest score
@@ -61,6 +73,7 @@ static void undo_move(void) {
     can_undo = 0;
     render_board(&board);
     render_score(board.score, best);
+    render_gain(0);
 }
 
 /* Highest value produced by this move, or 0 if nothing merged. Drives the
@@ -118,11 +131,22 @@ static void play(void) {
             undo_board = board;
             if (board_slide(&board, dir, &res)) {
                 uint8_t merged = top_merge_exp(&res);
+                uint8_t spawn;
                 can_undo = 1;
                 if (merged) sound_merge(merged); else sound_move();
                 render_slide(&res);
-                board_spawn(&board);
+
+                /* Draw the settled board with the new tile's slot still empty,
+                   flash the merges, then let the new tile arrive. Spawning it
+                   in the same frame as everything else made it look like it
+                   had been there all along. */
+                spawn = board_spawn(&board);
                 render_board(&board);
+                render_cell(spawn, 0);
+                render_merge_pop(&board, &res);
+                render_cell(spawn, board.cell[spawn]);
+                render_gain(res.gained);
+
                 if (board.score > best) {
                     best = board.score;
                     save_store(best);
