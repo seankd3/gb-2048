@@ -24,13 +24,14 @@ static uint8_t    can_undo;
 
 /* The title screen doubles as the entropy source: however many frames the
    player leaves it sitting there seeds the run. */
-static void title_screen(void) {
+static void title_screen(uint8_t resume) {
     uint16_t ticks = 0;
     uint8_t  shown = 1;
+    const char *prompt = resume ? "CONTINUE" : "PRESS START";
 
     render_clear();
     render_cell_at(8, 4, EXP_2048);
-    render_text_centered(10, "PRESS START");
+    render_text_centered(10, prompt);
 
     /* Only the best score belongs here. The old screen showed SCORE 0, which
        is just a zero taking up room. */
@@ -43,7 +44,7 @@ static void title_screen(void) {
         /* Slow blink, the classic attract-screen tell that it wants a press. */
         if ((ticks & 31) == 0) {
             shown = shown ? 0 : 1;
-            render_text_centered(10, shown ? "PRESS START" : "           ");
+            render_text_centered(10, shown ? prompt : "           ");
         }
 
         if (input_pressed() & (J_START | J_A)) break;
@@ -52,17 +53,21 @@ static void title_screen(void) {
     sound_start();
 }
 
+static void draw_everything(void) {
+    render_clear();
+    render_board(&board);
+    render_score(board.score, best);
+    render_gain(0);
+}
+
 static void new_game(void) {
     board_reset(&board);
     board_spawn(&board);
     board_spawn(&board);
     won_announced = 0;
     can_undo = 0;
-
-    render_clear();
-    render_board(&board);
-    render_score(board.score, best);
-    render_gain(0);
+    save_store_game(&board, won_announced);
+    draw_everything();
 }
 
 /* Best is deliberately not rolled back by undo: it records the highest score
@@ -104,11 +109,16 @@ static void wait_for_start(void) {
     }
 }
 
-static void play(void) {
+static void play(uint8_t resume) {
     uint8_t pressed;
     Direction dir;
 
-    new_game();
+    if (resume) {
+        can_undo = 0;      /* undo does not survive a power cycle */
+        draw_everything();
+    } else {
+        new_game();
+    }
 
     for (;;) {
         frame_next();
@@ -120,9 +130,7 @@ static void play(void) {
                 new_game();
                 continue;
             }
-            render_clear();
-            render_board(&board);
-            render_score(board.score, best);
+            draw_everything();
             continue;
         }
         if (pressed & J_B) undo_move();
@@ -153,6 +161,10 @@ static void play(void) {
                 }
                 render_score(board.score, best);
 
+                /* Written every move, so the power can go at any moment and
+                   the board comes back exactly as it was. */
+                save_store_game(&board, won_announced);
+
                 if (!won_announced && board_max_exp(&board) >= EXP_2048) {
                     won_announced = 1;
                     sound_win();
@@ -163,6 +175,7 @@ static void play(void) {
 
                 if (!board_can_move(&board)) {
                     sound_gameover();
+                    save_clear_game();   /* nothing left to resume into */
                     render_banner("GAME OVER", "START FOR NEW");
                     wait_for_start();
                     return;
@@ -175,15 +188,22 @@ static void play(void) {
 }
 
 void main(void) {
+    uint8_t resume;
+
     cpu_fast();          /* CGB double speed: headroom for full-board redraws */
     render_init();
     sound_init();
     save_load(&best);
     input_reset();
 
+    /* Only the first run after power-on can resume; everything after it is a
+       fresh game. */
+    resume = save_load_game(&board, &won_announced);
+
     for (;;) {
-        title_screen();
-        play();
+        title_screen(resume);
+        play(resume);
+        resume = 0;
     }
 }
 
